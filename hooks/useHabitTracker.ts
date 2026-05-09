@@ -56,7 +56,6 @@ function removeCompletionFromMap(
 }
 
 export function useHabitTracker() {
-  const supabase = useMemo(() => createClient(), []);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completionsByHabitId, setCompletionsByHabitId] =
     useState<CompletionMap>({});
@@ -68,6 +67,7 @@ export function useHabitTracker() {
     setError(null);
 
     const { startDate, endDate } = getCurrentMonthDateRange();
+    const supabase = createClient();
 
     const { data: habitRows, error: habitsError } = await supabase
       .from("habits")
@@ -95,10 +95,10 @@ export function useHabitTracker() {
     setHabits(habitRows ?? []);
     setCompletionsByHabitId(buildCompletionMap(completionRows ?? []));
     setIsLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
-    void fetchHabits();
+    void Promise.resolve().then(() => fetchHabits());
   }, [fetchHabits]);
 
   const addHabit = useCallback(
@@ -118,6 +118,7 @@ export function useHabitTracker() {
       setHabits((currentHabits) => [...currentHabits, habit]);
       setError(null);
 
+      const supabase = createClient();
       const { error: insertError } = await supabase.from("habits").insert({
         id: habit.id,
         name: habit.name,
@@ -134,7 +135,7 @@ export function useHabitTracker() {
 
       return habit;
     },
-    [supabase],
+    [],
   );
 
   const toggleBox = useCallback(
@@ -152,6 +153,7 @@ export function useHabitTracker() {
         setError(null);
 
         void (async () => {
+          const supabase = createClient();
           const { error: deleteError } = await supabase
             .from("completions")
             .delete()
@@ -190,6 +192,7 @@ export function useHabitTracker() {
       setError(null);
 
       void (async () => {
+        const supabase = createClient();
         const { error: insertError } = await supabase
           .from("completions")
           .insert(completion);
@@ -204,7 +207,7 @@ export function useHabitTracker() {
 
       return completion;
     },
-    [completionsByHabitId, supabase],
+    [completionsByHabitId],
   );
 
   const habitsWithCompletions = useMemo(
