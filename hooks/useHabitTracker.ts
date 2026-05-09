@@ -138,7 +138,7 @@ export function useHabitTracker() {
   );
 
   const toggleBox = useCallback(
-    async (habitId: string, dayIndex: number) => {
+    (habitId: string, dayIndex: number) => {
       if (isFutureDayIndex(dayIndex)) {
         return null;
       }
@@ -151,22 +151,23 @@ export function useHabitTracker() {
         });
         setError(null);
 
-        const { error: deleteError } = await supabase
-          .from("completions")
-          .delete()
-          .eq("id", currentCompletion.id);
+        void (async () => {
+          const { error: deleteError } = await supabase
+            .from("completions")
+            .delete()
+            .eq("id", currentCompletion.id);
 
-        if (deleteError) {
-          setCompletionsByHabitId((currentMap) => ({
-            ...currentMap,
-            [habitId]: {
-              ...currentMap[habitId],
-              [dayIndex]: currentCompletion,
-            },
-          }));
-          setError(deleteError.message);
-          return null;
-        }
+          if (deleteError) {
+            setCompletionsByHabitId((currentMap) => ({
+              ...currentMap,
+              [habitId]: {
+                ...currentMap[habitId],
+                [dayIndex]: currentCompletion,
+              },
+            }));
+            setError(deleteError.message);
+          }
+        })();
 
         return null;
       }
@@ -188,17 +189,18 @@ export function useHabitTracker() {
       }));
       setError(null);
 
-      const { error: insertError } = await supabase
-        .from("completions")
-        .insert(completion);
+      void (async () => {
+        const { error: insertError } = await supabase
+          .from("completions")
+          .insert(completion);
 
-      if (insertError) {
-        setCompletionsByHabitId((currentMap) => {
-          return removeCompletionFromMap(currentMap, habitId, dayIndex);
-        });
-        setError(insertError.message);
-        return null;
-      }
+        if (insertError) {
+          setCompletionsByHabitId((currentMap) => {
+            return removeCompletionFromMap(currentMap, habitId, dayIndex);
+          });
+          setError(insertError.message);
+        }
+      })();
 
       return completion;
     },
