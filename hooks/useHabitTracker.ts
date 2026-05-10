@@ -62,39 +62,48 @@ export function useHabitTracker() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Loads habits and current-month completions from Supabase.
+   * Uses try/finally so loading never sticks if createClient throws or a request rejects.
+   */
   const fetchHabits = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
-    const { startDate, endDate } = getCurrentMonthDateRange();
-    const supabase = createClient();
+    try {
+      const { startDate, endDate } = getCurrentMonthDateRange();
+      const supabase = createClient();
 
-    const { data: habitRows, error: habitsError } = await supabase
-      .from("habits")
-      .select("*")
-      .order("created_at", { ascending: true });
+      const { data: habitRows, error: habitsError } = await supabase
+        .from("habits")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-    if (habitsError) {
-      setError(habitsError.message);
+      if (habitsError) {
+        setError(habitsError.message);
+        return;
+      }
+
+      const { data: completionRows, error: completionsError } = await supabase
+        .from("completions")
+        .select("*")
+        .gte("date", startDate)
+        .lte("date", endDate);
+
+      if (completionsError) {
+        setError(completionsError.message);
+        return;
+      }
+
+      setHabits(habitRows ?? []);
+      setCompletionsByHabitId(buildCompletionMap(completionRows ?? []));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load quest data.";
+      setError(message);
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const { data: completionRows, error: completionsError } = await supabase
-      .from("completions")
-      .select("*")
-      .gte("date", startDate)
-      .lte("date", endDate);
-
-    if (completionsError) {
-      setError(completionsError.message);
-      setIsLoading(false);
-      return;
-    }
-
-    setHabits(habitRows ?? []);
-    setCompletionsByHabitId(buildCompletionMap(completionRows ?? []));
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
