@@ -51,12 +51,18 @@ export default function Home() {
           </div>
         ) : null}
 
-        {!isLoading && !hasHabits ? <HabitEntry addHabit={addHabit} /> : null}
+        {!isLoading ? <HabitEntry addHabit={addHabit} /> : null}
 
         {!isLoading && hasHabits ? (
           <div className="flex flex-col gap-6">
             <ScoreBoard totalCoins={totalCoins} />
             <HabitGrid habits={habits} toggleBox={toggleBox} />
+          </div>
+        ) : null}
+
+        {!isLoading && !hasHabits ? (
+          <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center text-sm font-bold text-slate-400">
+            Add your first habit above to start building the monthly grid.
           </div>
         ) : null}
       </div>
