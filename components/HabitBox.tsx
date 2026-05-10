@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { playCoinSound } from "../lib/playCoinSound";
+
 export type HabitBoxStatus = "checked" | "unchecked" | "future";
 
 type HabitBoxClickResult =
@@ -70,6 +72,7 @@ export function HabitBox({
   const burstTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFuture = status === "future";
   const isChecked = status === "checked";
+  const isUnchecked = status === "unchecked";
 
   useEffect(() => {
     return () => {
@@ -89,6 +92,10 @@ export function HabitBox({
       ? null
       : getCoinValue(clickResult);
 
+    if (isUnchecked && immediateCoinValue !== null) {
+      void playCoinSound();
+    }
+
     setActiveCoinValue(immediateCoinValue ?? awardedCoinValue);
     setBurstKey((currentKey) => currentKey + 1);
     setIsBursting(true);
@@ -106,6 +113,10 @@ export function HabitBox({
 
       if (resolvedCoinValue !== null) {
         setActiveCoinValue(resolvedCoinValue);
+
+        if (isUnchecked && isPromiseClickResult(clickResult)) {
+          void playCoinSound();
+        }
       }
     });
   }
