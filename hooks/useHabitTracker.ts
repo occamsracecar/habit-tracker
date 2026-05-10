@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { createClient, supabaseConfigurationError } from "../lib/supabase";
+import {
+  createClient,
+  formatSupabaseRequestError,
+  supabaseConfigurationError,
+} from "../lib/supabase";
 import {
   getCurrentMonthDateRange,
   getDateForDayIndex,
@@ -83,7 +87,7 @@ export function useHabitTracker() {
       .order("created_at", { ascending: true });
 
     if (habitsError) {
-      setError(habitsError.message);
+      setError(formatSupabaseRequestError(habitsError));
       setIsLoading(false);
       return;
     }
@@ -95,7 +99,7 @@ export function useHabitTracker() {
       .lte("date", endDate);
 
     if (completionsError) {
-      setError(completionsError.message);
+      setError(formatSupabaseRequestError(completionsError));
       setIsLoading(false);
       return;
     }
@@ -143,7 +147,7 @@ export function useHabitTracker() {
         setHabits((currentHabits) =>
           currentHabits.filter((currentHabit) => currentHabit.id !== habit.id),
         );
-        setError(insertError.message);
+        setError(formatSupabaseRequestError(insertError));
         return null;
       }
 
@@ -187,7 +191,7 @@ export function useHabitTracker() {
                 [dayIndex]: currentCompletion,
               },
             }));
-            setError(deleteError.message);
+            setError(formatSupabaseRequestError(deleteError));
           }
         })();
 
@@ -220,7 +224,7 @@ export function useHabitTracker() {
           setCompletionsByHabitId((currentMap) => {
             return removeCompletionFromMap(currentMap, habitId, dayIndex);
           });
-          setError(insertError.message);
+          setError(formatSupabaseRequestError(insertError));
         }
       })();
 
