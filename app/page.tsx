@@ -3,16 +3,29 @@
 import { HabitEntry } from "../components/HabitEntry";
 import { HabitGrid } from "../components/HabitGrid";
 import { ScoreBoard } from "../components/ScoreBoard";
+import { SupabaseConnectionBanner } from "../components/SupabaseConnectionBanner";
 import { useHabitTracker } from "../hooks/useHabitTracker";
 
 export default function Home() {
-  const { habits, totalCoins, isLoading, error, addHabit, toggleBox } =
-    useHabitTracker();
+  const {
+    habits,
+    totalCoins,
+    isLoading,
+    error,
+    connectionStatus,
+    addHabit,
+    toggleBox,
+  } = useHabitTracker();
   const hasHabits = habits.length > 0;
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-8">
+        <SupabaseConnectionBanner
+          status={connectionStatus}
+          errorMessage={error}
+        />
+
         <header className="flex flex-col gap-3">
           <p className="font-mono text-xs font-black uppercase tracking-[0.4em] text-cyan-200 drop-shadow-[0_0_8px_rgba(103,232,249,0.9)]">
             Habit arcade
@@ -38,12 +51,18 @@ export default function Home() {
           </div>
         ) : null}
 
-        {!isLoading && !hasHabits ? <HabitEntry addHabit={addHabit} /> : null}
+        {!isLoading ? <HabitEntry addHabit={addHabit} /> : null}
 
         {!isLoading && hasHabits ? (
           <div className="flex flex-col gap-6">
             <ScoreBoard totalCoins={totalCoins} />
             <HabitGrid habits={habits} toggleBox={toggleBox} />
+          </div>
+        ) : null}
+
+        {!isLoading && !hasHabits ? (
+          <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900/40 p-8 text-center text-sm font-bold text-slate-400">
+            Add your first habit above to start building the monthly grid.
           </div>
         ) : null}
       </div>

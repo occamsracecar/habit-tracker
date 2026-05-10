@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { createClient } from "../lib/supabase";
+import {
+  createClient,
+  formatSupabaseRequestError,
+  supabaseConfigurationError,
+} from "../lib/supabase";
 import {
   getCurrentMonthDateRange,
   getDateForDayIndex,
@@ -17,6 +21,8 @@ type Completion = Database["public"]["Tables"]["completions"]["Row"];
 export type HabitWithCompletions = Habit & {
   completions: Completion[];
 };
+
+export type SupabaseConnectionStatus = "checking" | "connected" | "failed";
 
 type CompletionMap = Record<string, Record<number, Completion>>;
 
@@ -61,13 +67,54 @@ export function useHabitTracker() {
     useState<CompletionMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] =
+    useState<SupabaseConnectionStatus>("checking");
+
+  const failConnection = useCallback((message: string) => {
+    setConnectionStatus("failed");
+    setError(message);
+  }, []);
+
+  const checkConnection = useCallback(async () => {
+    setConnectionStatus("checking");
+
+    const supabase = createClient();
+
+    if (!supabase) {
+      failConnection(supabaseConfigurationError);
+      return false;
+    }
+
+    const { error: connectionError } = await supabase
+      .from("habits")
+      .select("id")
+      .limit(1);
+
+    if (connectionError) {
+      failConnection(formatSupabaseRequestError(connectionError));
+      return false;
+    }
+
+    setConnectionStatus("connected");
+    setError(null);
+    return true;
+  }, [failConnection]);
 
   const fetchHabits = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setConnectionStatus("checking");
 
     const { startDate, endDate } = getCurrentMonthDateRange();
     const supabase = createClient();
+
+    if (!supabase) {
+      setHabits([]);
+      setCompletionsByHabitId({});
+      failConnection(supabaseConfigurationError);
+      setIsLoading(false);
+      return;
+    }
 
     const { data: habitRows, error: habitsError } = await supabase
       .from("habits")
@@ -75,7 +122,7 @@ export function useHabitTracker() {
       .order("created_at", { ascending: true });
 
     if (habitsError) {
-      setError(habitsError.message);
+      failConnection(formatSupabaseRequestError(habitsError));
       setIsLoading(false);
       return;
     }
@@ -87,25 +134,41 @@ export function useHabitTracker() {
       .lte("date", endDate);
 
     if (completionsError) {
-      setError(completionsError.message);
+      failConnection(formatSupabaseRequestError(completionsError));
       setIsLoading(false);
       return;
     }
 
     setHabits(habitRows ?? []);
     setCompletionsByHabitId(buildCompletionMap(completionRows ?? []));
+    setConnectionStatus("connected");
     setIsLoading(false);
-  }, []);
+  }, [failConnection]);
 
   useEffect(() => {
     void Promise.resolve().then(() => fetchHabits());
   }, [fetchHabits]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void checkConnection();
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [checkConnection]);
 
   const addHabit = useCallback(
     async (name: string) => {
       const trimmedName = name.trim();
 
       if (!trimmedName) {
+        return null;
+      }
+
+      const supabase = createClient();
+
+      if (!supabase) {
+        failConnection(supabaseConfigurationError);
         return null;
       }
 
@@ -118,7 +181,6 @@ export function useHabitTracker() {
       setHabits((currentHabits) => [...currentHabits, habit]);
       setError(null);
 
-      const supabase = createClient();
       const { error: insertError } = await supabase.from("habits").insert({
         id: habit.id,
         name: habit.name,
@@ -129,18 +191,26 @@ export function useHabitTracker() {
         setHabits((currentHabits) =>
           currentHabits.filter((currentHabit) => currentHabit.id !== habit.id),
         );
-        setError(insertError.message);
+        failConnection(formatSupabaseRequestError(insertError));
         return null;
       }
 
+      setConnectionStatus("connected");
       return habit;
     },
-    [],
+    [failConnection],
   );
 
   const toggleBox = useCallback(
     (habitId: string, dayIndex: number) => {
       if (isFutureDayIndex(dayIndex)) {
+        return null;
+      }
+
+      const supabase = createClient();
+
+      if (!supabase) {
+        failConnection(supabaseConfigurationError);
         return null;
       }
 
@@ -153,7 +223,6 @@ export function useHabitTracker() {
         setError(null);
 
         void (async () => {
-          const supabase = createClient();
           const { error: deleteError } = await supabase
             .from("completions")
             .delete()
@@ -167,8 +236,11 @@ export function useHabitTracker() {
                 [dayIndex]: currentCompletion,
               },
             }));
-            setError(deleteError.message);
+            failConnection(formatSupabaseRequestError(deleteError));
+            return;
           }
+
+          setConnectionStatus("connected");
         })();
 
         return null;
@@ -192,7 +264,6 @@ export function useHabitTracker() {
       setError(null);
 
       void (async () => {
-        const supabase = createClient();
         const { error: insertError } = await supabase
           .from("completions")
           .insert(completion);
@@ -201,13 +272,16 @@ export function useHabitTracker() {
           setCompletionsByHabitId((currentMap) => {
             return removeCompletionFromMap(currentMap, habitId, dayIndex);
           });
-          setError(insertError.message);
+          failConnection(formatSupabaseRequestError(insertError));
+          return;
         }
+
+        setConnectionStatus("connected");
       })();
 
       return completion;
     },
-    [completionsByHabitId],
+    [completionsByHabitId, failConnection],
   );
 
   const habitsWithCompletions = useMemo(
@@ -235,6 +309,8 @@ export function useHabitTracker() {
     totalCoins,
     isLoading,
     error,
+    connectionStatus,
+    checkConnection,
     fetchHabits,
     addHabit,
     toggleBox,
