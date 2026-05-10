@@ -22,6 +22,8 @@ export type HabitWithCompletions = Habit & {
   completions: Completion[];
 };
 
+export type SupabaseConnectionStatus = "checking" | "connected" | "failed";
+
 type CompletionMap = Record<string, Record<number, Completion>>;
 
 function buildCompletionMap(completions: Completion[]) {
@@ -65,10 +67,43 @@ export function useHabitTracker() {
     useState<CompletionMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] =
+    useState<SupabaseConnectionStatus>("checking");
+
+  const failConnection = useCallback((message: string) => {
+    setConnectionStatus("failed");
+    setError(message);
+  }, []);
+
+  const checkConnection = useCallback(async () => {
+    setConnectionStatus("checking");
+
+    const supabase = createClient();
+
+    if (!supabase) {
+      failConnection(supabaseConfigurationError);
+      return false;
+    }
+
+    const { error: connectionError } = await supabase
+      .from("habits")
+      .select("id")
+      .limit(1);
+
+    if (connectionError) {
+      failConnection(formatSupabaseRequestError(connectionError));
+      return false;
+    }
+
+    setConnectionStatus("connected");
+    setError(null);
+    return true;
+  }, [failConnection]);
 
   const fetchHabits = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setConnectionStatus("checking");
 
     const { startDate, endDate } = getCurrentMonthDateRange();
     const supabase = createClient();
@@ -76,7 +111,7 @@ export function useHabitTracker() {
     if (!supabase) {
       setHabits([]);
       setCompletionsByHabitId({});
-      setError(supabaseConfigurationError);
+      failConnection(supabaseConfigurationError);
       setIsLoading(false);
       return;
     }
@@ -87,7 +122,7 @@ export function useHabitTracker() {
       .order("created_at", { ascending: true });
 
     if (habitsError) {
-      setError(formatSupabaseRequestError(habitsError));
+      failConnection(formatSupabaseRequestError(habitsError));
       setIsLoading(false);
       return;
     }
@@ -99,19 +134,28 @@ export function useHabitTracker() {
       .lte("date", endDate);
 
     if (completionsError) {
-      setError(formatSupabaseRequestError(completionsError));
+      failConnection(formatSupabaseRequestError(completionsError));
       setIsLoading(false);
       return;
     }
 
     setHabits(habitRows ?? []);
     setCompletionsByHabitId(buildCompletionMap(completionRows ?? []));
+    setConnectionStatus("connected");
     setIsLoading(false);
-  }, []);
+  }, [failConnection]);
 
   useEffect(() => {
     void Promise.resolve().then(() => fetchHabits());
   }, [fetchHabits]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void checkConnection();
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [checkConnection]);
 
   const addHabit = useCallback(
     async (name: string) => {
@@ -124,7 +168,7 @@ export function useHabitTracker() {
       const supabase = createClient();
 
       if (!supabase) {
-        setError(supabaseConfigurationError);
+        failConnection(supabaseConfigurationError);
         return null;
       }
 
@@ -147,13 +191,14 @@ export function useHabitTracker() {
         setHabits((currentHabits) =>
           currentHabits.filter((currentHabit) => currentHabit.id !== habit.id),
         );
-        setError(formatSupabaseRequestError(insertError));
+        failConnection(formatSupabaseRequestError(insertError));
         return null;
       }
 
+      setConnectionStatus("connected");
       return habit;
     },
-    [],
+    [failConnection],
   );
 
   const toggleBox = useCallback(
@@ -165,7 +210,7 @@ export function useHabitTracker() {
       const supabase = createClient();
 
       if (!supabase) {
-        setError(supabaseConfigurationError);
+        failConnection(supabaseConfigurationError);
         return null;
       }
 
@@ -191,8 +236,11 @@ export function useHabitTracker() {
                 [dayIndex]: currentCompletion,
               },
             }));
-            setError(formatSupabaseRequestError(deleteError));
+            failConnection(formatSupabaseRequestError(deleteError));
+            return;
           }
+
+          setConnectionStatus("connected");
         })();
 
         return null;
@@ -224,13 +272,16 @@ export function useHabitTracker() {
           setCompletionsByHabitId((currentMap) => {
             return removeCompletionFromMap(currentMap, habitId, dayIndex);
           });
-          setError(formatSupabaseRequestError(insertError));
+          failConnection(formatSupabaseRequestError(insertError));
+          return;
         }
+
+        setConnectionStatus("connected");
       })();
 
       return completion;
     },
-    [completionsByHabitId],
+    [completionsByHabitId, failConnection],
   );
 
   const habitsWithCompletions = useMemo(
@@ -258,6 +309,8 @@ export function useHabitTracker() {
     totalCoins,
     isLoading,
     error,
+    connectionStatus,
+    checkConnection,
     fetchHabits,
     addHabit,
     toggleBox,
