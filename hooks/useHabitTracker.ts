@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { createClient } from "../lib/supabase";
+import { createClient, supabaseConfigurationError } from "../lib/supabase";
 import {
   getCurrentMonthDateRange,
   getDateForDayIndex,
@@ -69,6 +69,14 @@ export function useHabitTracker() {
     const { startDate, endDate } = getCurrentMonthDateRange();
     const supabase = createClient();
 
+    if (!supabase) {
+      setHabits([]);
+      setCompletionsByHabitId({});
+      setError(supabaseConfigurationError);
+      setIsLoading(false);
+      return;
+    }
+
     const { data: habitRows, error: habitsError } = await supabase
       .from("habits")
       .select("*")
@@ -109,6 +117,13 @@ export function useHabitTracker() {
         return null;
       }
 
+      const supabase = createClient();
+
+      if (!supabase) {
+        setError(supabaseConfigurationError);
+        return null;
+      }
+
       const habit: Habit = {
         id: crypto.randomUUID(),
         name: trimmedName,
@@ -118,7 +133,6 @@ export function useHabitTracker() {
       setHabits((currentHabits) => [...currentHabits, habit]);
       setError(null);
 
-      const supabase = createClient();
       const { error: insertError } = await supabase.from("habits").insert({
         id: habit.id,
         name: habit.name,
@@ -144,6 +158,13 @@ export function useHabitTracker() {
         return null;
       }
 
+      const supabase = createClient();
+
+      if (!supabase) {
+        setError(supabaseConfigurationError);
+        return null;
+      }
+
       const currentCompletion = completionsByHabitId[habitId]?.[dayIndex];
 
       if (currentCompletion) {
@@ -153,7 +174,6 @@ export function useHabitTracker() {
         setError(null);
 
         void (async () => {
-          const supabase = createClient();
           const { error: deleteError } = await supabase
             .from("completions")
             .delete()
@@ -192,7 +212,6 @@ export function useHabitTracker() {
       setError(null);
 
       void (async () => {
-        const supabase = createClient();
         const { error: insertError } = await supabase
           .from("completions")
           .insert(completion);
